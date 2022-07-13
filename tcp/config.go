@@ -2,6 +2,7 @@ package tcp
 
 import "time"
 
+// Config TCP服务器参数配置
 type Config struct {
 	Ticker      bool          // 是否开启tick
 	MsgHeader   int           // 消息头部长度
@@ -12,8 +13,9 @@ type Config struct {
 	TLSConfig   *TLSConfig    // TLS配置
 }
 
+// TLSConfig TLS证书配置
 type TLSConfig struct {
 	ServerCert string // 服务器证书
 	ServerKey  string // 服务器密钥
-	ClientCert string // 客户端证书
+	RootCa     string // 根证书
 }

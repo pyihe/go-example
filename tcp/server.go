@@ -98,7 +98,7 @@ func (s *tcpServer) loadTLSConfig() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	b, err := ioutil.ReadFile(tlsConfig.ClientCert)
+	b, err := ioutil.ReadFile(tlsConfig.RootCa)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (s *tcpServer) loadTLSConfig() (*tls.Config, error) {
 	return &tls.Config{
 		Certificates: []tls.Certificate{serverCert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    clientCertPool,
+		ClientCAs:    clientCertPool, // 用于验证客户端证书是否合法
 	}, nil
 }
 

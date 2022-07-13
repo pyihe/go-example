@@ -22,7 +22,7 @@ func main() {
 	for i := 0; i < 1; i++ {
 		wg.Wrap(func() {
 			dialTCP("localhost:9999").start()
-			//dialWithTLS("localhost:9999", "../certs/client.pem", "../certs/client.key").start()
+			//dialWithTLS("localhost:9999", "cadir", "../certs/client.pem", "../certs/client.key").start()
 		})
 	}
 	wg.Wait()
@@ -43,12 +43,14 @@ func dialTCP(addr string) (c *client) {
 	return
 }
 
-func dialWithTLS(addr string, cert, key string) (c *client) {
+func dialWithTLS(addr string, ca, cert, key string) (c *client) {
+	// 加载客户端证书
 	certificate, err := tls.LoadX509KeyPair(cert, key)
 	if err != nil {
 		panic(err)
 	}
-
+	// 因为是自签名证书, 这里直接使用的是客户端证书, 实际上如果需要执行完整的证书链验证过程: 验证服务端主机名与证书中的是否一致
+	//cCertBytes, err := ioutil.ReadFile(ca)
 	cCertBytes, err := ioutil.ReadFile(cert)
 	if err != nil {
 		panic(err)
@@ -60,8 +62,8 @@ func dialWithTLS(addr string, cert, key string) (c *client) {
 
 	conf := &tls.Config{
 		Certificates:       []tls.Certificate{certificate},
-		ClientCAs:          clientCertPool,
-		InsecureSkipVerify: true, // 这里设置为true表示不需要验证服务器主机名与证书主机名是否一致，只当测试时设置
+		ClientCAs:          clientCertPool, // 用于验证服务端证书是否合法
+		InsecureSkipVerify: true,           // 这里设置为true表示不需要验证服务器主机名与证书主机名是否一致，只当测试时设置
 	}
 	conn, err := tls.Dial("tcp", addr, conf)
 	if err != nil {

@@ -23,7 +23,7 @@ func main() {
 		//TLSConfig: &tcp.TLSConfig{
 		//	ServerCert: "../certs/server.pem",
 		//	ServerKey:  "../certs/server.key",
-		//	ClientCert: "../certs/client.pem",
+		//	RootCa: "../certs/client.pem", // 这里使用客户端的证书作为根证书, 实际使用中应该是自己计算机内置的根证书
 		//},
 	}
 
