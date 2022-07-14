@@ -8,6 +8,7 @@ type Config struct {
 	HeaderSize   int           // 消息头部长度
 	MaxMsgSize   int           // 消息体最大长度
 	MinMsgSize   int           // 消息体最小长度
+	MaxConn      int           // 最大连接数
 	Port         int           // 服务器端口号
 	ReadBuffer   int           // 读取消息的通道缓冲区大小, 默认64
 	IP           string        // 服务器IP

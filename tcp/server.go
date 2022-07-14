@@ -14,6 +14,7 @@ import (
 
 	"github.com/pyihe/go-pkg/bytes"
 	"github.com/pyihe/go-pkg/errors"
+	"github.com/pyihe/go-pkg/maps"
 	"github.com/pyihe/go-pkg/packets"
 	"github.com/pyihe/go-pkg/syncs"
 )
@@ -46,7 +47,7 @@ type tcpServer struct {
 	ctx        context.Context    // 上下文
 	cancel     context.CancelFunc // 取消函数
 	wg         syncs.WgWrapper    // waitgroup
-	conns      sync.Map           // 保存所有的连接
+	conns      *maps.Map          // 维护所有的连接信息
 	listener   net.Listener       // net listener
 	pkt        packets.IPacket    // 封包、拆包
 	msgPool    sync.Pool          // message pool
@@ -66,7 +67,7 @@ func Run(config *Config, handler Handler) (io.Closer, error) {
 	}
 	var s = &tcpServer{
 		wg:      syncs.WgWrapper{},
-		conns:   sync.Map{},
+		conns:   maps.NewMap(),
 		pkt:     packets.NewPacket(packetOpts...),
 		msgPool: sync.Pool{},
 		handler: handler,
@@ -122,17 +123,29 @@ func (s *tcpServer) Close() error {
 	s.cancel()
 
 	// 关闭所有连接
-	s.conns.Range(func(k, v any) bool {
+	s.conns.LockRange(func(k interface{}, v interface{}) bool {
 		c, ok := v.(*tcpConn)
 		if ok {
 			c.conn.Close()
 		}
-		return true
+		return false
 	})
 
 	s.wg.Wait()
 
 	return nil
+}
+
+func (s *tcpServer) addConn(conn *tcpConn) {
+	s.conns.Set(conn.RemoteAddr(), conn)
+}
+
+func (s *tcpServer) removeConn(conn *tcpConn) {
+	s.conns.Del(conn.RemoteAddr())
+}
+
+func (s *tcpServer) countConn() int {
+	return s.conns.Len()
 }
 
 func (s *tcpServer) process() {
@@ -216,15 +229,21 @@ func (s *tcpServer) start() {
 }
 
 func (s *tcpServer) handleConn(conn net.Conn) {
+	// 如果超过连接上限, 抛弃并关闭该连接
+	if maxConns := s.config.MaxConn; s.countConn() >= maxConns {
+		conn.Close()
+		return
+	}
+
 	client := newTCPConn(conn, s)
 	s.handler.OnConnect(client)
-	s.conns.Store(conn.RemoteAddr(), client)
+	s.addConn(client)
 
 	s.ioLoop(client)
 
 	s.handler.OnClose(client)
 	client.Close()
-	s.conns.Delete(conn.RemoteAddr())
+	s.removeConn(client)
 }
 
 func (s *tcpServer) ioLoop(tc *tcpConn) {
