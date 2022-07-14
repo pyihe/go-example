@@ -40,10 +40,15 @@ type tcpServer struct {
 func Run(config *Config, handler Handler) (io.Closer, error) {
 	var err error
 	var address = fmt.Sprintf("%s:%d", config.IP, config.Port)
+	var packetOpts = []packets.Option{
+		packets.WithHeaderSize(4),
+		packets.WithMaxMsgSize(4 * 1024),
+		packets.WithMinMsgSize(1),
+	}
 	var s = &tcpServer{
 		wg:      syncs.WgWrapper{},
 		conns:   sync.Map{},
-		pkt:     packets.NewPacket(config.MsgHeader, config.MsgSize),
+		pkt:     packets.NewPacket(packetOpts...),
 		handler: handler,
 		config:  config,
 	}

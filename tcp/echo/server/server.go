@@ -15,8 +15,8 @@ import (
 func main() {
 	config := tcp.Config{
 		Ticker:      true,
-		MsgHeader:   4,
-		MsgSize:     4 * 1024,
+		HeaderSize:  4,
+		MaxMsgSize:  4 * 1024,
 		Port:        9999,
 		IP:          "localhost",
 		ReadTimeout: 5 * time.Second,
