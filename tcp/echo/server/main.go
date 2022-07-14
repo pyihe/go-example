@@ -14,9 +14,10 @@ import (
 
 func main() {
 	config := tcp.Config{
-		Ticker:      true,
-		HeaderSize:  4,
-		MaxMsgSize:  4 * 1024,
+		Ticker:     true,
+		HeaderSize: 4,
+		MaxMsgSize: 4 * 1024,
+		//ReadBuffer:  1024,
 		Port:        9999,
 		IP:          "localhost",
 		ReadTimeout: 5 * time.Second,
@@ -54,7 +55,7 @@ func (s *EchoServer) OnMessage(conn tcp.Conn, data []byte) {
 func (s *EchoServer) OnTick() (time.Duration, bool) {
 	now := time.Now().Format("15:04:05")
 	println(now, s.count.Value())
-	return 5 * time.Second, false
+	return 1 * time.Second, false
 }
 
 // OnConnect 新连接建立时执行

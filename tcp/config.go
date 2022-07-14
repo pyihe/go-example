@@ -9,7 +9,7 @@ type Config struct {
 	MaxMsgSize   int           // 消息体最大长度
 	MinMsgSize   int           // 消息体最小长度
 	Port         int           // 服务器端口号
-	ReadBuffer   int           // 读取消息的通道缓冲区大小
+	ReadBuffer   int           // 读取消息的通道缓冲区大小, 默认64
 	IP           string        // 服务器IP
 	ReadTimeout  time.Duration // 读超时
 	WriteTimeout time.Duration // 写超时

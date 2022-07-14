@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
 	"net"
 
@@ -112,6 +111,5 @@ func (c *client) onConnect() {
 
 // 收到消息时执行: 这里只是简单的将消息
 func (c *client) onMessage(message []byte) {
-	fmt.Println(string(message))
 	c.sendMsg(message)
 }

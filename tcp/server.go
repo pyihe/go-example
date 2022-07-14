@@ -26,7 +26,7 @@ type Handler interface {
 	// OnConnect 建立连接时调用
 	OnConnect(Conn)
 
-	// OnClose 连接断开时调用
+	// OnClose 连接断开时调用, 这里同时包含客户端主动关闭以及服务器关闭连接
 	OnClose(Conn)
 
 	// OnTick 定时任务
@@ -42,6 +42,7 @@ type message struct {
 }
 
 type tcpServer struct {
+	closed     bool               // 服务器是否主动关闭
 	ctx        context.Context    // 上下文
 	cancel     context.CancelFunc // 取消函数
 	wg         syncs.WgWrapper    // waitgroup
@@ -55,6 +56,7 @@ type tcpServer struct {
 }
 
 func Run(config *Config, handler Handler) (io.Closer, error) {
+	var bufferSize = 64
 	var err error
 	var address = fmt.Sprintf("%s:%d", config.IP, config.Port)
 	var packetOpts = []packets.Option{
@@ -63,15 +65,19 @@ func Run(config *Config, handler Handler) (io.Closer, error) {
 		packets.WithMinMsgSize(config.MinMsgSize),
 	}
 	var s = &tcpServer{
-		wg:         syncs.WgWrapper{},
-		conns:      sync.Map{},
-		pkt:        packets.NewPacket(packetOpts...),
-		msgPool:    sync.Pool{},
-		readBuffer: make(chan *message, config.ReadBuffer),
-		handler:    handler,
-		config:     config,
+		wg:      syncs.WgWrapper{},
+		conns:   sync.Map{},
+		pkt:     packets.NewPacket(packetOpts...),
+		msgPool: sync.Pool{},
+		handler: handler,
+		config:  config,
 	}
 
+	if config.ReadBuffer > 0 {
+		bufferSize = config.ReadBuffer
+	}
+
+	s.readBuffer = make(chan *message, bufferSize)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	if tlsConfig := config.TLSConfig; tlsConfig == nil {
@@ -100,6 +106,15 @@ func Run(config *Config, handler Handler) (io.Closer, error) {
 }
 
 func (s *tcpServer) Close() error {
+	if s.closed {
+		return nil
+	}
+
+	s.closed = true
+
+	// 关闭缓冲区
+	close(s.readBuffer)
+
 	// 关闭Listener
 	s.listener.Close()
 
@@ -114,6 +129,7 @@ func (s *tcpServer) Close() error {
 		}
 		return true
 	})
+
 	s.wg.Wait()
 
 	return nil
@@ -122,8 +138,6 @@ func (s *tcpServer) Close() error {
 func (s *tcpServer) process() {
 	for {
 		select {
-		case <-s.ctx.Done():
-			return
 		case msg, ok := <-s.readBuffer:
 			if !ok {
 				return
@@ -202,8 +216,6 @@ func (s *tcpServer) start() {
 }
 
 func (s *tcpServer) handleConn(conn net.Conn) {
-	//s.logger.Infof("Accept New Connection: %s\n", conn.RemoteAddr())
-
 	client := newTCPConn(conn, s)
 	s.handler.OnConnect(client)
 	s.conns.Store(conn.RemoteAddr(), client)
@@ -211,8 +223,8 @@ func (s *tcpServer) handleConn(conn net.Conn) {
 	s.ioLoop(client)
 
 	s.handler.OnClose(client)
+	client.Close()
 	s.conns.Delete(conn.RemoteAddr())
-	conn.Close()
 }
 
 func (s *tcpServer) ioLoop(tc *tcpConn) {
@@ -227,13 +239,16 @@ func (s *tcpServer) ioLoop(tc *tcpConn) {
 		data, err := pkt.UnPacket(reader)
 		if err != nil {
 			if !isClientClose(err) && !isServerClose(err) {
+				fmt.Printf("read tcp fail: %v\n", err)
 			}
 			break
 		}
-		msg := s.getMessage()
-		msg.conn = tc
-		msg.data.Write(data)
-		s.readBuffer <- msg
+		if !s.closed {
+			msg := s.getMessage()
+			msg.conn = tc
+			msg.data.Write(data)
+			s.readBuffer <- msg
+		}
 	}
 }
 

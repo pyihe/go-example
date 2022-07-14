@@ -26,6 +26,7 @@ type Conn interface {
 }
 
 type tcpConn struct {
+	closed      bool              // 是否关闭: 避免重复关闭
 	id          int64             // 唯一ID
 	conn        net.Conn          // 底层连接
 	writeBuffer *bytes.ByteBuffer // 写缓冲区
@@ -109,6 +110,10 @@ end:
 }
 
 func (c *tcpConn) Close() error {
+	if c.closed {
+		return nil
+	}
+	c.closed = true
 	// 归还缓存
 	bytes.Put(c.writeBuffer)
 	// 关闭连接
