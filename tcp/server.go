@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pyihe/go-pkg/bytes"
@@ -43,7 +44,7 @@ type message struct {
 }
 
 type tcpServer struct {
-	closed     bool               // 服务器是否主动关闭
+	closeTag   int32              // 服务器是否主动关闭
 	ctx        context.Context    // 上下文
 	cancel     context.CancelFunc // 取消函数
 	wg         syncs.WgWrapper    // waitgroup
@@ -103,15 +104,16 @@ func Run(config *Config, handler Handler) (io.Closer, error) {
 	s.wg.Wrap(func() {
 		s.process()
 	})
+	s.wg.Wrap(func() {
+		s.tick()
+	})
 	return s, nil
 }
 
 func (s *tcpServer) Close() error {
-	if s.closed {
+	if atomic.CompareAndSwapInt32(&s.closeTag, open, closed) == false {
 		return nil
 	}
-
-	s.closed = true
 
 	// 关闭缓冲区
 	close(s.readBuffer)
@@ -208,10 +210,6 @@ func (s *tcpServer) putMessage(m *message) {
 }
 
 func (s *tcpServer) start() {
-	if s.config.Ticker {
-		go s.tick()
-	}
-
 	var wg syncs.WgWrapper
 	for {
 		clientConn, err := s.listener.Accept()
@@ -262,7 +260,7 @@ func (s *tcpServer) ioLoop(tc *tcpConn) {
 			}
 			break
 		}
-		if !s.closed {
+		if !s.isClosed() {
 			msg := s.getMessage()
 			msg.conn = tc
 			msg.data.Write(data)
@@ -281,6 +279,9 @@ func (s *tcpServer) setReadTimeout(c *tcpConn) error {
 }
 
 func (s *tcpServer) tick() {
+	if !s.config.Ticker {
+		return
+	}
 	var (
 		stop  bool
 		delay time.Duration
@@ -308,4 +309,8 @@ func (s *tcpServer) tick() {
 		case <-timer.C:
 		}
 	}
+}
+
+func (s *tcpServer) isClosed() bool {
+	return atomic.LoadInt32(&s.closeTag) == closed
 }
