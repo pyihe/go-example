@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pyihe/go-pkg/bytes"
 	"github.com/pyihe/go-pkg/errors"
 	"github.com/pyihe/go-pkg/packets"
 	"github.com/pyihe/go-pkg/syncs"
@@ -19,38 +20,56 @@ import (
 
 // Handler 服务Handler, 由上层实现
 type Handler interface {
-	OnMessage(Conn, []byte)        // 收到消息时调用
-	OnConnect(Conn)                // 建立连接时调用
-	OnClose(Conn)                  // 连接断开时调用
-	OnTick() (time.Duration, bool) // 定时任务
-	NewUniqueID() int64            // 获取全局唯一ID
+	// OnMessage 收到消息时调用, 需要注意的是如果需要改变[]byte, 请拷贝并另行处理, 切勿操作原始的[]byte
+	OnMessage(Conn, []byte)
+
+	// OnConnect 建立连接时调用
+	OnConnect(Conn)
+
+	// OnClose 连接断开时调用
+	OnClose(Conn)
+
+	// OnTick 定时任务
+	OnTick() (time.Duration, bool)
+
+	// NewUniqueID 获取全局唯一ID
+	NewUniqueID() int64
+}
+
+type message struct {
+	conn *tcpConn
+	data *bytes.ByteBuffer
 }
 
 type tcpServer struct {
-	ctx      context.Context    // 上下文
-	cancel   context.CancelFunc // 取消函数
-	wg       syncs.WgWrapper    // waitgroup
-	conns    sync.Map           // 保存所有的连接
-	listener net.Listener       // net listener
-	pkt      packets.IPacket    // 封包、拆包
-	handler  Handler            // 服务器的handler
-	config   *Config            // 服务器配置
+	ctx        context.Context    // 上下文
+	cancel     context.CancelFunc // 取消函数
+	wg         syncs.WgWrapper    // waitgroup
+	conns      sync.Map           // 保存所有的连接
+	listener   net.Listener       // net listener
+	pkt        packets.IPacket    // 封包、拆包
+	msgPool    sync.Pool          // message pool
+	readBuffer chan *message      // 处理收到消息的缓冲区
+	handler    Handler            // 服务器的handler
+	config     *Config            // 服务器配置
 }
 
 func Run(config *Config, handler Handler) (io.Closer, error) {
 	var err error
 	var address = fmt.Sprintf("%s:%d", config.IP, config.Port)
 	var packetOpts = []packets.Option{
-		packets.WithHeaderSize(4),
-		packets.WithMaxMsgSize(4 * 1024),
-		packets.WithMinMsgSize(1),
+		packets.WithHeaderSize(config.HeaderSize),
+		packets.WithMaxMsgSize(config.MaxMsgSize),
+		packets.WithMinMsgSize(config.MinMsgSize),
 	}
 	var s = &tcpServer{
-		wg:      syncs.WgWrapper{},
-		conns:   sync.Map{},
-		pkt:     packets.NewPacket(packetOpts...),
-		handler: handler,
-		config:  config,
+		wg:         syncs.WgWrapper{},
+		conns:      sync.Map{},
+		pkt:        packets.NewPacket(packetOpts...),
+		msgPool:    sync.Pool{},
+		readBuffer: make(chan *message, config.ReadBuffer),
+		handler:    handler,
+		config:     config,
 	}
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -74,6 +93,9 @@ func Run(config *Config, handler Handler) (io.Closer, error) {
 	s.wg.Wrap(func() {
 		s.start()
 	})
+	s.wg.Wrap(func() {
+		s.process()
+	})
 	return s, nil
 }
 
@@ -95,6 +117,23 @@ func (s *tcpServer) Close() error {
 	s.wg.Wait()
 
 	return nil
+}
+
+func (s *tcpServer) process() {
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case msg, ok := <-s.readBuffer:
+			if !ok {
+				return
+			}
+			if msg != nil {
+				s.handler.OnMessage(msg.conn, msg.data.Bytes())
+				s.putMessage(msg)
+			}
+		}
+	}
 }
 
 func (s *tcpServer) loadTLSConfig() (*tls.Config, error) {
@@ -122,7 +161,26 @@ func (s *tcpServer) newUniqueID() int64 {
 	return s.handler.NewUniqueID()
 }
 
-func (s *tcpServer) start() error {
+func (s *tcpServer) getMessage() *message {
+	data := s.msgPool.Get()
+	if data == nil {
+		return &message{
+			data: bytes.Get(),
+		}
+	}
+	return data.(*message)
+}
+
+func (s *tcpServer) putMessage(m *message) {
+	if m != nil {
+		m.data.Reset()
+		bytes.Put(m.data)
+		m.data = nil
+		m.conn = nil
+	}
+}
+
+func (s *tcpServer) start() {
 	if s.config.Ticker {
 		go s.tick()
 	}
@@ -132,7 +190,7 @@ func (s *tcpServer) start() error {
 		clientConn, err := s.listener.Accept()
 		if err != nil {
 			if !isServerClose(err) {
-				return fmt.Errorf("TCP Accept err(%v)", err)
+				fmt.Printf("TCP Accept err(%v)\n", err)
 			}
 			break
 		}
@@ -141,7 +199,6 @@ func (s *tcpServer) start() error {
 		})
 	}
 	wg.Wait()
-	return nil
 }
 
 func (s *tcpServer) handleConn(conn net.Conn) {
@@ -173,7 +230,10 @@ func (s *tcpServer) ioLoop(tc *tcpConn) {
 			}
 			break
 		}
-		s.handler.OnMessage(tc, data)
+		msg := s.getMessage()
+		msg.conn = tc
+		msg.data.Write(data)
+		s.readBuffer <- msg
 	}
 }
 

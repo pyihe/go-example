@@ -14,7 +14,12 @@ import (
 )
 
 var (
-	pkt = packets.NewPacket(4, 4096)
+	opts = []packets.Option{
+		packets.WithHeaderSize(4),
+		packets.WithMaxMsgSize(4 * 1024),
+		packets.WithMinMsgSize(1),
+	}
+	pkt = packets.NewPacket(opts...)
 )
 
 func main() {
@@ -94,7 +99,6 @@ func (c *client) start() {
 	for {
 		data, err := pkt.UnPacket(reader)
 		if err != nil {
-			fmt.Println("dddd", err)
 			break
 		}
 		c.onMessage(data)
@@ -103,7 +107,7 @@ func (c *client) start() {
 
 // 建立连接时执行
 func (c *client) onConnect() {
-	c.sendMsg(strings.Bytes("Welcome to Go World!"))
+	c.sendMsg(strings.Bytes("Welcome to the Gopher's World!"))
 }
 
 // 收到消息时执行: 这里只是简单的将消息
