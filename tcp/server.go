@@ -230,7 +230,7 @@ func (s *tcpServer) start() {
 
 func (s *tcpServer) handleConn(conn net.Conn) {
 	// 如果超过连接上限, 抛弃并关闭该连接
-	if maxConns := s.config.MaxConn; s.countConn() >= maxConns {
+	if maxConns := s.config.MaxConn; maxConns > 0 && s.countConn() >= maxConns {
 		conn.Close()
 		return
 	}
