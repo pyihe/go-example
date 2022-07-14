@@ -68,7 +68,7 @@ func (s *EchoServer) OnClose(conn tcp.Conn) {
 	s.count.Inc(-1)
 }
 
-// NewUniqueID 获取全局唯一ID
-func (s *EchoServer) NewUniqueID() int64 {
+// GenerateID 获取全局唯一ID
+func (s *EchoServer) GenerateID() int64 {
 	return snowflakes.NewWorker(1).GetInt64()
 }

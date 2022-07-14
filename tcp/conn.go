@@ -35,7 +35,7 @@ type tcpConn struct {
 
 func newTCPConn(conn net.Conn, s *tcpServer) *tcpConn {
 	return &tcpConn{
-		id:     s.handler.NewUniqueID(),
+		id:     s.handler.GenerateID(),
 		conn:   conn,
 		server: s,
 	}

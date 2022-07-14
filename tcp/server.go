@@ -33,8 +33,8 @@ type Handler interface {
 	// OnTick 定时任务
 	OnTick() (time.Duration, bool)
 
-	// NewUniqueID 获取全局唯一ID
-	NewUniqueID() int64
+	// GenerateID 获取全局唯一ID
+	GenerateID() int64
 }
 
 type message struct {
@@ -185,7 +185,7 @@ func (s *tcpServer) loadTLSConfig() (*tls.Config, error) {
 }
 
 func (s *tcpServer) newUniqueID() int64 {
-	return s.handler.NewUniqueID()
+	return s.handler.GenerateID()
 }
 
 func (s *tcpServer) getMessage() *message {
