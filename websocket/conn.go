@@ -19,11 +19,6 @@ const (
 	closed = 1
 )
 
-type Message struct {
-	MessageType int
-	Message     []byte
-}
-
 type Conn interface {
 	// GetID 获取唯一ID
 	GetID() int64
@@ -31,32 +26,37 @@ type Conn interface {
 	// Close 关闭连接
 	Close() error
 
-	// SendMsg 发送消息
-	SendMsg(...*Message) error
+	// SendTextMsg 发送文本消息
+	SendTextMsg(...[]byte) error
+
+	// SendBinaryMsg 发送二进制消息
+	SendBinaryMsg(...[]byte) error
 
 	// RemoteAddr 获取客户端地址
 	RemoteAddr() net.Addr
 }
 
 type wsConn struct {
+	minMsgSize  int
+	maxMsgSize  int
 	closedTag   int32
 	id          int64
 	conn        *websocket.Conn
-	server      *wsServer
-	writeBuffer chan *Message
+	writeBuffer chan *message
 }
 
-func newWsConn(c *websocket.Conn, s *wsServer) *wsConn {
+func newWsConn(id int64, c *websocket.Conn, config *Config) *wsConn {
 	writeBufferSize := 64
-	if s.config.WriteBufferSize > 0 {
-		writeBufferSize = s.config.WriteBufferSize
+	if config.WriteBufferSize > 0 {
+		writeBufferSize = config.WriteBufferSize
 	}
 	return &wsConn{
+		minMsgSize:  config.MinMsgSize,
+		maxMsgSize:  config.MaxMsgSize,
 		closedTag:   open,
-		id:          s.handler.GenerateID(),
+		id:          id,
 		conn:        c,
-		server:      s,
-		writeBuffer: make(chan *Message, writeBufferSize),
+		writeBuffer: make(chan *message, writeBufferSize),
 	}
 }
 
@@ -73,21 +73,43 @@ func (c *wsConn) Close() error {
 	return c.conn.Close()
 }
 
-func (c *wsConn) SendMsg(message ...*Message) error {
+func (c *wsConn) SendTextMsg(message ...[]byte) error {
 	if c.isClosed() {
 		return ErrSendOnClosedConn
 	}
-	config := c.server.config
 	for _, m := range message {
-		m := m
-		size := len(m.Message)
-		if config.MaxMsgSize > 0 && size > config.MaxMsgSize {
+		size := len(m)
+		if c.maxMsgSize > 0 && size > c.maxMsgSize {
 			return ErrMessageTooLong
 		}
-		if config.MinMsgSize > 0 && size < config.MinMsgSize {
+		if c.minMsgSize > 0 && size < c.minMsgSize {
 			return ErrMessageTooShort
 		}
-		c.writeBuffer <- m
+		msg := getMessage()
+		msg.mType = websocket.TextMessage
+		msg.conn = c
+		msg.write(m)
+		c.writeBuffer <- msg
+	}
+	return nil
+}
+
+func (c *wsConn) SendBinaryMsg(message ...[]byte) error {
+	if c.isClosed() {
+		return ErrSendOnClosedConn
+	}
+	for _, m := range message {
+		size := len(m)
+		if c.maxMsgSize > 0 && size > c.maxMsgSize {
+			return ErrMessageTooLong
+		}
+		if c.minMsgSize > 0 && size < c.minMsgSize {
+			return ErrMessageTooShort
+		}
+		msg := getMessage()
+		msg.mType = websocket.BinaryMessage
+		msg.write(m)
+		c.writeBuffer <- msg
 	}
 	return nil
 }
@@ -101,7 +123,8 @@ func (c *wsConn) writeLoop() {
 		if m == nil {
 			break
 		}
-		err := c.conn.WriteMessage(m.MessageType, m.Message)
+		err := c.conn.WriteMessage(m.mType, m.data)
+		putMessage(m)
 		if err != nil {
 			break
 		}

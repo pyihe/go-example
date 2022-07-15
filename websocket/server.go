@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/pyihe/go-pkg/bytes"
 	"github.com/pyihe/go-pkg/errors"
 	"github.com/pyihe/go-pkg/maps"
 	"github.com/pyihe/go-pkg/syncs"
@@ -28,20 +27,14 @@ type Handler interface {
 	// OnClose 连接关闭时调用
 	OnClose(conn Conn)
 
+	// OnPing 收到PingMessage时调用
+	OnPing(conn Conn, pingMessage string)
+
 	// OnTick 定时任务, bool值返回true的话定时器将被终止, 并不可恢复
 	OnTick() (time.Duration, bool)
 
-	// OnPing 收到心跳时调用
-	OnPing(conn Conn)
-
 	// GenerateID 生成全局唯一ID
 	GenerateID() int64
-}
-
-type message struct {
-	messageType int
-	conn        *wsConn
-	data        *bytes.ByteBuffer
 }
 
 type wsServer struct {
@@ -49,7 +42,6 @@ type wsServer struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        syncs.WgWrapper
-	msgPool   sync.Pool
 	msgBuffer chan *message      // 消息缓冲区
 	ln        net.Listener       // 连接监听器
 	handler   Handler            // 服务器handler
@@ -73,10 +65,12 @@ func Run(config *Config, handler Handler) (io.Closer, error) {
 	s := &wsServer{
 		closeTag:  open,
 		wg:        syncs.WgWrapper{},
-		msgPool:   sync.Pool{},
 		msgBuffer: make(chan *message, bufferSize),
 		handler:   handler,
 		upgrader: websocket.Upgrader{
+			ReadBufferSize:   4096,
+			WriteBufferSize:  4096,
+			WriteBufferPool:  &sync.Pool{},
 			HandshakeTimeout: config.ReadTimeout,
 			CheckOrigin: func(r *http.Request) bool {
 				return true
@@ -142,8 +136,6 @@ func (s *wsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	// 设置允许读取的最大消息长度
-	conn.SetReadLimit(int64(s.config.MaxMsgSize))
 
 	// 判断是否超过最大连接数限制
 	if maxConns := s.config.MaxConns; maxConns > 0 && s.countConn() >= maxConns {
@@ -152,7 +144,14 @@ func (s *wsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 新建连接
-	newConn := newWsConn(conn, s)
+	newConn := newWsConn(s.generateId(), conn, s.config)
+	// 设置允许读取的最大消息长度
+	newConn.conn.SetReadLimit(int64(s.config.MaxMsgSize))
+	// 设置PingHandler
+	newConn.conn.SetPingHandler(func(appData string) error {
+		s.handler.OnPing(newConn, appData)
+		return nil
+	})
 	s.handler.OnConnect(newConn)
 	// 添加连接
 	s.addConn(newConn)
@@ -180,6 +179,7 @@ func (s *wsServer) Close() error {
 		return nil
 	}
 
+	s.ln.Close()
 	s.cancel()
 	close(s.msgBuffer)
 	s.conns.LockRange(func(k interface{}, v interface{}) bool {
@@ -193,36 +193,21 @@ func (s *wsServer) Close() error {
 	return nil
 }
 
-func (s *wsServer) getMessage() *message {
-	m, ok := s.msgPool.Get().(*message)
-	if !ok {
-		return &message{
-			data: bytes.Get(),
-		}
-	}
-	return m
-}
-
-func (s *wsServer) putMessage(m *message) {
-	if m != nil {
-		m.messageType = 0
-		m.conn = nil
-		m.data.Reset()
-		bytes.Put(m.data)
-		s.msgPool.Put(m)
-	}
-}
-
 func (s *wsServer) addConn(wsConn *wsConn) {
-	s.conns.Set(wsConn.conn.RemoteAddr(), wsConn)
+	s.conns.Set(wsConn.GetID(), wsConn)
 }
 
 func (s *wsServer) removeConn(wsConn *wsConn) {
-	s.conns.Del(wsConn.conn.RemoteAddr())
+	s.conns.Del(wsConn.GetID())
 }
 
 func (s *wsServer) countConn() int {
 	return s.conns.Len()
+}
+
+func (s *wsServer) existConn(connID int64) bool {
+	v := s.conns.Get(connID)
+	return v != nil
 }
 
 func (s *wsServer) processMessage() {
@@ -230,25 +215,18 @@ func (s *wsServer) processMessage() {
 		select {
 		case m, ok := <-s.msgBuffer:
 			if !ok {
-				break
+				fmt.Println("process return")
+				return
 			}
-			switch m.messageType {
-			case websocket.PongMessage:
-			case websocket.PingMessage:
-				s.handler.OnPing(m.conn)
-			case websocket.TextMessage, websocket.BinaryMessage:
-				s.handler.OnMessage(m.conn, m.data.Bytes())
-			case websocket.CloseMessage:
-				s.handler.OnClose(m.conn)
-			}
-			s.putMessage(m)
+			s.handler.OnMessage(m.conn, m.data)
+			putMessage(m)
 		}
 	}
 }
 
 func (s *wsServer) ioLoop(wConn *wsConn) {
 	for {
-		messageType, b, err := wConn.conn.ReadMessage()
+		_, b, err := wConn.conn.ReadMessage()
 		if err != nil {
 			if err != io.EOF {
 				fmt.Printf("read websocket fail: %v\n", err)
@@ -256,10 +234,9 @@ func (s *wsServer) ioLoop(wConn *wsConn) {
 			break
 		}
 		if !s.isClosed() {
-			m := s.getMessage()
-			m.messageType = messageType
+			m := getMessage()
 			m.conn = wConn
-			m.data.Write(b)
+			m.write(b)
 			s.msgBuffer <- m
 		}
 	}
@@ -291,6 +268,7 @@ func (s *wsServer) tick() {
 		}
 		select {
 		case <-s.ctx.Done():
+			fmt.Println("tick return")
 			return
 		case <-timer.C:
 		}
@@ -299,4 +277,14 @@ func (s *wsServer) tick() {
 
 func (s *wsServer) isClosed() bool {
 	return atomic.LoadInt32(&s.closeTag) == closed
+}
+
+func (s *wsServer) generateId() (id int64) {
+	for {
+		id = s.handler.GenerateID()
+		if !s.existConn(id) {
+			break
+		}
+	}
+	return
 }
