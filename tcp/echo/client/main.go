@@ -25,7 +25,7 @@ func main() {
 	wg := &syncs.WgWrapper{}
 	for i := 0; i < 1; i++ {
 		wg.Wrap(func() {
-			dialTCP("localhost:9999").start()
+			dialTCP("127.0.0.1:9999").start()
 			//dialWithTLS("localhost:9999", "cadir", "../certs/client.pem", "../certs/client.key").start()
 		})
 	}

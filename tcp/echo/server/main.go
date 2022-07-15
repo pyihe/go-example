@@ -19,7 +19,7 @@ func main() {
 		MaxMsgSize: 4 * 1024,
 		//ReadBuffer:  1024,
 		Port:        9999,
-		IP:          "localhost",
+		IP:          "127.0.0.1",
 		ReadTimeout: 5 * time.Second,
 		//TLSConfig: &tcp.TLSConfig{
 		//	ServerCert: "../certs/server.pem",
