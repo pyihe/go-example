@@ -6,7 +6,7 @@ var mPool sync.Pool
 
 type message struct {
 	mType int
-	conn  *wsConn
+	conn  Conn
 	data  []byte
 }
 
