@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+option go_package = "/proto";
+
+package proto;
+
+message EchoRequest {
+    string Message = 1;
+}
+
+message EchoResponse {
+    string Message = 1;
+}
+
+service Unary {
+    rpc Echo(EchoRequest) returns (EchoResponse);
+}
+
+service ServerStream {
+    rpc Echo(EchoRequest) returns (stream EchoResponse);
+}
+
+service ClientStream {
+    rpc Echo(stream EchoRequest) returns (EchoResponse);
+}
+
+service BidStream {
+    rpc Echo(stream EchoRequest) returns (EchoResponse);
+}
