@@ -25,5 +25,5 @@ service ClientStream {
 }
 
 service BidStream {
-    rpc Echo(stream EchoRequest) returns (EchoResponse);
+    rpc Echo(stream EchoRequest) returns (stream EchoResponse);
 }
