@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/pyihe/go-example/grpc/proto"
+	"github.com/pyihe/go-pkg/errors"
 	"github.com/pyihe/go-pkg/syncs"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type server struct {
@@ -38,20 +41,35 @@ func (s *server) Close() error {
 	return nil
 }
 
-func (s *server) Echo(stream proto.ClientStream_EchoServer) error {
+func (s *server) Echo(stream proto.ClientStream_EchoServer) (err error) {
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		err = errors.New("unary: want metadata but not exist")
+		return
+	}
+	fmt.Printf("clientstream: md(%v)\n", md)
+
+	//header := metadata.Pairs("token", md.Get("token")[0])
+	//stream.SendHeader(header)
+
+	var builder strings.Builder
+loop:
 	for {
 		in, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
+		switch err {
+		case io.EOF:
+			break loop
+		case nil:
+			builder.WriteString(in.Message)
+			fmt.Printf("clientstream: receive request(%v)\n", in.String())
+		default:
+			fmt.Printf("clientstream: receive fail(%v)\n", err)
 			return err
 		}
-		fmt.Printf("ClientStream服务器收到消息: %v\n", in.Message)
-		if err = stream.SendMsg(&proto.EchoResponse{
-			Message: in.Message,
-		}); err != nil {
-			fmt.Printf("ClientStream SendMsg err: %v\n", err)
-		}
 	}
+	header := metadata.Pairs("token", md.Get("token")[0])
+	stream.SetHeader(header)
+	trailer := metadata.Pairs("token", md.Get("token")[0])
+	stream.SetTrailer(trailer)
+	return stream.SendMsg(&proto.EchoResponse{Message: builder.String()})
 }

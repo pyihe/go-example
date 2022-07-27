@@ -7,10 +7,13 @@ import (
 	"net"
 
 	"github.com/pyihe/go-example/grpc/proto"
+	"github.com/pyihe/go-pkg/errors"
 	"github.com/pyihe/go-pkg/syncs"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
+// 简单模式，即常规的rpc request-response请求响应模式，每个客户端的请求对应服务器的一个响应
 type server struct {
 	proto.UnimplementedUnaryServer
 	wg         syncs.WgWrapper
@@ -40,7 +43,20 @@ func (s *server) Close() error {
 }
 
 func (s *server) Echo(ctx context.Context, in *proto.EchoRequest) (resp *proto.EchoResponse, err error) {
-	fmt.Printf("unary服务器收到消息: %v\n", in.Message)
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		err = errors.New("unary: want metadata but not exist")
+		return
+	}
+
+	fmt.Printf("unary: receive request, md(%v), request(%v)\n", md, in.String())
+
+	header := metadata.Pairs("token", md.Get("token")[0])
+	trailer := metadata.Pairs("token", md.Get("token")[0])
+
+	// 响应请求携带header, trailer
+	grpc.SetHeader(ctx, header)
+	grpc.SetTrailer(ctx, trailer)
 	resp = &proto.EchoResponse{Message: in.Message}
 	return
 }
