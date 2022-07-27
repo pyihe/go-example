@@ -11,159 +11,254 @@ import (
 	"github.com/pyihe/go-example/grpc/proto"
 	"github.com/pyihe/go-example/grpc/serverstream"
 	"github.com/pyihe/go-example/grpc/unary"
+	"github.com/pyihe/go-pkg/rands"
+	"github.com/pyihe/go-pkg/syncs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
-	// 开启各个类型的服务
-	// unary
-	unaryCloser, err := unary.Run(":8801")
-	if err != nil {
-		fmt.Printf("unary run err: %v\n", err)
-		return
-	}
-	defer unaryCloser.Close()
-
-	// server stream
-	ssCloser, err := serverstream.Run(":8802")
-	if err != nil {
-		fmt.Printf("server stream run err: %v\n", err)
-		return
-	}
-	defer ssCloser.Close()
-
-	// client stream
-	ccCloser, err := clientstream.Run(":8803")
-	if err != nil {
-		fmt.Printf("client stream run err: %v\n", err)
-		return
-	}
-	defer ccCloser.Close()
-
-	// bid stream
-	bidCloser, err := bidstream.Run(":8804")
-	if err != nil {
-		fmt.Printf("bid stream err: %v\n", err)
-		return
-	}
-	defer bidCloser.Close()
-
-	//unaryClient()
-	//serverStream()
-	//clientStream()
-	bidStream()
+	testUnary()
+	testServerStream()
+	testClientStream()
+	testBidStream()
 }
 
-func unaryClient() {
-	conn, err := grpc.Dial(":8801", grpc.WithTransportCredentials(insecure.NewCredentials()))
+func testUnary() {
+	// 运行服务端
+	closer, err := unary.Run(":8801")
 	if err != nil {
-		fmt.Printf("unary dial err: %v\n", err)
+		fmt.Printf("unary: start server fail: %v\n", err)
 		return
 	}
-	client := proto.NewUnaryClient(conn)
-	resp, err := client.Echo(context.Background(), &proto.EchoRequest{Message: "Hello World!"})
+	defer closer.Close()
+
+	// 开启客户端
+	// 先创建grpc连接
+	grpcConn, err := grpc.Dial(":8801", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		fmt.Printf("unary echo err: %v\n", err)
+		fmt.Printf("unary: grpc dial fail(%v)\n", err)
 		return
 	}
-	fmt.Printf("unary客户端收到回复: %v\n", resp.Message)
-	time.Sleep(1 * time.Second)
-	conn.Close()
+	defer grpcConn.Close()
+
+	// 通过连接创建Unary服务的客户端
+	unaryClient := proto.NewUnaryClient(grpcConn)
+
+	// 如果需要携带metadata
+	md := metadata.Pairs("token", rands.String(10))
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+	request := &proto.EchoRequest{Message: "I'm Unary!"}
+	fmt.Printf("unary: sending request, md(%v), request(%v)\n", md, request.String())
+
+	// header, trailer用于接收服务器返回的metadata
+	var header, trailer metadata.MD
+	resp, err := unaryClient.Echo(ctx, request, grpc.Header(&header), grpc.Trailer(&trailer))
+	if err != nil {
+		fmt.Printf("unary: echo fail(%v)\n", err)
+		return
+	}
+	fmt.Printf("unary: receive response, header(%v), trailer(%v), response(%v)\n\n", header, trailer, resp.String())
 }
 
-func serverStream() {
-	conn, err := grpc.Dial(":8802", grpc.WithTransportCredentials(insecure.NewCredentials()))
+func testServerStream() {
+	// 先开启服务端
+	closer, err := serverstream.Run(":8802")
 	if err != nil {
-		fmt.Printf("server stream dial err: %v\n", err)
+		fmt.Printf("serverstream: start server fail(%v)\n", err)
 		return
 	}
-	defer conn.Close()
+	defer closer.Close()
 
-	// 客户端调用API后会返回一个Stream, 然后从Stream中读取服务器返回的响应
-	client := proto.NewServerStreamClient(conn)
-	stream, err := client.Echo(context.Background(), &proto.EchoRequest{Message: "Hello World!"})
+	// 创建grpc连接
+	grpcConn, err := grpc.Dial(":8802", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		fmt.Printf("ServerStream echo err: %v\n", err)
+		fmt.Printf("serverstream: grpc dial fail(%v)\n", err)
 		return
 	}
-	// 需要处理stream返回的数据
-	go func() {
-		for {
-			resp, err := stream.Recv()
-			if err != nil {
-				if err != io.EOF {
-					fmt.Printf("server stream err: %v\n", err)
-				}
-				return
+	defer grpcConn.Close()
+
+	// 创建grpc client
+	client := proto.NewServerStreamClient(grpcConn)
+
+	md := metadata.Pairs("token", rands.String(10))
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+	request := &proto.EchoRequest{Message: "I'm serverstream!"}
+	fmt.Printf("serverstream: sending request, md(%v), request(%v)\n", md, request.String())
+
+	// 发送请求同时获取服务器返回的stream
+	stream, err := client.Echo(ctx, request)
+	if err != nil {
+		fmt.Printf("serverstream: echo fail(%v)\n", err)
+		return
+	}
+
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("serverstream: recv fail(%v)\n", err)
 			}
-			fmt.Printf("ServerStream客户端收到回复: %v\n", resp.Message)
+			break
 		}
+		fmt.Printf("serverstream: receive response, response(%v)\n", resp.String())
+	}
+	// 读取回复，因为执行Echo后，服务器已经处理完并返回，所以读取header的顺序没有影响（可以在读取回复前或者后）
+	header, err := stream.Header()
+	if err != nil {
+		fmt.Printf("serverstream: stream header fail(%v)\n", err)
+		return
+	}
+	fmt.Printf("serverstream: header(%v)\n", header)
 
-	}()
-	time.Sleep(1 * time.Second)
-	stream.CloseSend()
+	//但是trailer必须得等到所有回复完毕后才能读取
+	trailer := stream.Trailer()
+	fmt.Printf("serverstream: trailer(%v)\n\n", trailer)
 }
 
-func clientStream() {
-	conn, err := grpc.Dial(":8803", grpc.WithTransportCredentials(insecure.NewCredentials()))
+func testClientStream() {
+	// 先运行服务端
+	closer, err := clientstream.Run(":8803")
 	if err != nil {
-		fmt.Printf("client stream dial err: %v\n", err)
+		fmt.Printf("clientstream: start server fail(%v)\n", err)
 		return
 	}
-	defer conn.Close()
-	client := proto.NewClientStreamClient(conn)
-	stream, err := client.Echo(context.Background())
-	if err != nil {
-		fmt.Printf("client stream err: %v\n", err)
-		return
-	}
-	stream.Send(&proto.EchoRequest{Message: "Hello World!"})
+	defer closer.Close()
 
-	// 处理服务器返回的响应
+	// 创建grpc连接
+	grpcConn, err := grpc.Dial(":8803", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		fmt.Printf("clientstream: grpc dial fail(%v)\n", err)
+		return
+	}
+	defer grpcConn.Close()
+
+	// 创建grpc客户端
+	client := proto.NewClientStreamClient(grpcConn)
+
+	// 初始化请求和metadata
+	request := &proto.EchoRequest{Message: "I'm clientstream!"}
+	// 创建客户端的流
+	md := metadata.Pairs("token", rands.String(16))
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+	// 创建用于发送请求的stream
+	stream, err := client.Echo(ctx)
+	if err != nil {
+		fmt.Printf("clientstream: create stream fail(%v)\n", err)
+		return
+	}
+	fmt.Printf("clientstream: send, md(%v)\n", md)
+
+	// 如果要在读取回复之前读取header，那么服务端需要在回复之前就调用stream.SendHeader
+	//header, err := stream.Header()
+	//if err != nil {
+	//	fmt.Printf("clientstream: stream header fail(%v)\n", err)
+	//	return
+	//}
+	//fmt.Printf("clientstream: header(%v)\n", header)
+
+	// 发送请求
+	for i := 0; i < 10; i++ {
+		err = stream.Send(request)
+		if err != nil {
+			fmt.Printf("clientstream: send fail(%v)\n", err)
+			return
+		}
+	}
+
+	// 读取回复
 	resp, err := stream.CloseAndRecv()
 	if err != nil {
-		fmt.Printf("CloseAndRecv() err: %v\n", err)
+		fmt.Printf("clientstream: recv fail(%v)\n", err)
 		return
 	}
-	fmt.Printf("ClientStream客户端收到回复: %v\n", resp.Message)
-
-	time.Sleep(1 * time.Second)
-	stream.CloseSend()
+	// 如果是在读取回复之后再读取header，那么服务端只需要在发送回复之前写入header即可
+	header, err := stream.Header()
+	if err != nil {
+		fmt.Printf("clientstream: stream header fail(%v)\n", err)
+		return
+	}
+	fmt.Printf("clientstream: header(%v)\n", header)
+	trailer := stream.Trailer()
+	fmt.Printf("clientstream: trailer(%v), response(%v)\n\n", trailer, resp.String())
 }
 
-func bidStream() {
-	conn, err := grpc.Dial(":8804", grpc.WithTransportCredentials(insecure.NewCredentials()))
+func testBidStream() {
+	// 开启服务
+	closer, err := bidstream.Run(":8804")
 	if err != nil {
-		fmt.Printf("bid stream err: %v\n", err)
+		fmt.Printf("bidstream: start server fail(%v)\n", err)
 		return
 	}
-	defer conn.Close()
+	defer closer.Close()
 
-	client := proto.NewBidStreamClient(conn)
-	stream, err := client.Echo(context.Background())
+	// 创建grpc连接
+	grpcConn, err := grpc.Dial(":8804", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		fmt.Printf("new bid stream err: %v\n", err)
+		fmt.Printf("bidstream: grpc dial fail(%v)\n", err)
+		return
+	}
+	defer grpcConn.Close()
+
+	counter := new(syncs.AtomicInt32)
+	wg := syncs.WgWrapper{}
+	// 创建grpc客户端
+	client := proto.NewBidStreamClient(grpcConn)
+
+	md := metadata.Pairs("token", rands.String(16))
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	stream, err := client.Echo(ctx)
+	if err != nil {
+		fmt.Printf("bidstream: create stream fail(%v)\n", err)
 		return
 	}
 
-	go func() {
-		for {
-			resp := proto.EchoResponse{}
-			err = stream.RecvMsg(&resp)
-			if err != nil {
-				if err == io.EOF {
-					fmt.Printf("EOF")
-					return
-				}
-				fmt.Printf("bid stream recv err: %v\n", err)
-				return
-			}
-			fmt.Printf("bid stream收到回复: %v\n", resp.Message)
+	// 这里用两个协程分别读/写grpc stream
+	// 读
+	wg.Wrap(func() {
+		var header metadata.MD
+		var resp *proto.EchoResponse
+
+		header, err = stream.Header()
+		if err != nil {
+			fmt.Printf("bidstream client: header fail(%v)\n", err)
+			return
 		}
-	}()
+		fmt.Printf("bidstream client: header(%v)\n", header)
+	loop:
+		for {
+			resp, err = stream.Recv()
+			switch err {
+			case io.EOF:
+				break loop
+			case nil:
+				fmt.Printf("bidstream client: receive response(%v)\n", resp.String())
+				resp.Reset()
+				counter.Inc(1)
+			default:
+				fmt.Printf("bidstream client: receive fail(%v)\n", err)
+				break loop
+			}
+		}
+		trailer := stream.Trailer()
+		fmt.Printf("bidstream client: trailer(%v)\n", trailer)
+	})
 
-	stream.SendMsg(&proto.EchoRequest{Message: "Hello World!"})
-	time.Sleep(1 * time.Second)
-	//stream.CloseSend()
+	// 写，写入10此数据，然后发送close
+	wg.Wrap(func() {
+		for i := 0; i < 10; i++ {
+			stream.Send(&proto.EchoRequest{Message: fmt.Sprintf("I'm bidstream!——%d", i)})
+		}
+		var v int32
+		for v != 10 {
+			time.Sleep(50 * time.Millisecond)
+			v = counter.Value()
+		}
+		stream.CloseSend()
+	})
+	wg.Wait()
 }
