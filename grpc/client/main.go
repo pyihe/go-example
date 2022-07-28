@@ -19,10 +19,12 @@ import (
 )
 
 func main() {
-	testUnary()
-	testServerStream()
-	testClientStream()
-	testBidStream()
+	//testUnary()
+	//testServerStream()
+	//testClientStream()
+	//testBidStream()
+
+	testWithAuthAndTLS()
 }
 
 func testUnary() {
