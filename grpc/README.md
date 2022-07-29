@@ -44,6 +44,7 @@ metadata.NewOutgoingContext(ctx, md)
 
 | proto类型  | Go类型    | 备注                                            |
 |:---------|:--------|:----------------------------------------------|
+| bool     | bool    ||
 | double   | float64 ||
 | float    | float32 ||
 | int32    | int32   | 使用可变长度编码，如果字段值包含负数，建议使用sint32，因为int32编码负数的效率低 |
@@ -56,6 +57,5 @@ metadata.NewOutgoingContext(ctx, md)
 | fixed64  | uint64  | 编码长度总是8字节，如果字段值经常比2^56大，fixed64编码效率比uint64高   |
 | sfixed32 | int32   | 编码长度总是4字节                                     |
 | sfixed64 | int64   | 编码长度总是8字节                                     |
-| bool     | bool    ||
 | string   | string  | 值必须包含UTF-8编码或者7位ASCII文本，值长度不能超过2^32           |
 | bytes    | []byte  | 长度不能超过2^32                                    |
