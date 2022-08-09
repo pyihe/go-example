@@ -13,6 +13,8 @@ require (
 require (
 	cloud.google.com/go v0.34.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/snappy v0.0.1 // indirect
+	github.com/nsqio/go-nsq v1.1.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.1-0.20201104193830-18533face0df // indirect
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110 // indirect
 	golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1 // indirect
