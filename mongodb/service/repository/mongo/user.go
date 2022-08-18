@@ -20,5 +20,5 @@ func NewUserRepository(db *mongo.Database) service.UserAPI {
 }
 
 func (u *userRepository) InsertOne(user *model.User) error {
-
+	return nil
 }
