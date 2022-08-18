@@ -1,14 +1,12 @@
 package main
 
 import (
-	"time"
-
 	_ "github.com/pyihe/go-example/gin-swagger/docs"
 	"github.com/pyihe/go-example/gin-swagger/route"
 	"github.com/pyihe/go-example/gin-swagger/service"
+	"github.com/pyihe/go-example/pkg"
 	"github.com/pyihe/go-pkg/https/http_api"
 	"github.com/pyihe/go-pkg/tools"
-	"github.com/pyihe/plogs"
 )
 
 // @title          这里填写文档名称(必填项): Gin-Swagger在线文档测试项目
@@ -28,17 +26,7 @@ import (
 // @name                       Authorization
 // @description                API安全验证
 func main() {
-	opts := []plogs.Option{
-		plogs.WithName("swagger"),
-		plogs.WithFileOption(plogs.WriteByLevelMerged),
-		plogs.WithLogPath("./logs"),
-		plogs.WithStdout(true),
-		plogs.WithLogLevel(plogs.LevelInfo | plogs.LevelDebug | plogs.LevelWarn | plogs.LevelError | plogs.LevelFatal | plogs.LevelPanic),
-		plogs.WithMaxAge(24 * time.Hour),
-		plogs.WithMaxSize(60 * 1024 * 1024),
-	}
-
-	logger := plogs.NewLogger(opts...)
+	logger := pkg.InitLogger("swagger")
 	defer logger.Close()
 
 	httpConfig := http_api.Config{
