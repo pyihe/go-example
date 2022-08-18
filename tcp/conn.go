@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pyihe/go-pkg/buffers"
 	"github.com/pyihe/go-pkg/bytes"
 )
 
@@ -32,11 +33,10 @@ type Conn interface {
 }
 
 type tcpConn struct {
-	closeTag    int32             // 是否关闭: 避免重复关闭
-	id          int64             // 唯一ID
-	conn        net.Conn          // 底层连接
-	writeBuffer *bytes.ByteBuffer // 写缓冲区
-	server      *tcpServer        // 属于哪个服务器
+	closeTag int32      // 是否关闭: 避免重复关闭
+	id       int64      // 唯一ID
+	conn     net.Conn   // 底层连接
+	server   *tcpServer // 属于哪个服务器
 }
 
 func newTCPConn(conn net.Conn, s *tcpServer) *tcpConn {
@@ -45,20 +45,6 @@ func newTCPConn(conn net.Conn, s *tcpServer) *tcpConn {
 		conn:   conn,
 		server: s,
 	}
-}
-
-func (c *tcpConn) getBuffer() *bytes.ByteBuffer {
-	if c.writeBuffer == nil {
-		c.writeBuffer = bytes.Get()
-	}
-	return c.writeBuffer
-}
-
-func (c *tcpConn) releaseBuffer() {
-	if c.writeBuffer == nil {
-		return
-	}
-	c.writeBuffer.Reset()
 }
 
 func (c *tcpConn) GetID() int64 {
@@ -70,48 +56,39 @@ func (c *tcpConn) RemoteAddr() net.Addr {
 }
 
 func (c *tcpConn) SendMsg(message ...[]byte) (err error) {
-	connBuffer := c.getBuffer()
-	tempBuffer := bytes.Get()
+	buf := buffers.Get()
 	for _, m := range message {
-		tempBuffer.B, err = c.server.pkt.Packet(m)
+		data, err := c.server.pkt.Packet(m)
 		if err != nil {
 			break
 		}
-		if _, err = connBuffer.Write(tempBuffer.B); err != nil {
-			break
-		}
-		tempBuffer.Reset()
+		buf.Write(data)
 	}
+	m := bytes.Copy(buf.Bytes())
+	buffers.Put(buf)
 	if err == nil {
-		_, err = c.conn.Write(connBuffer.B)
+		_, err = c.conn.Write(m)
 	}
-	bytes.Put(tempBuffer)
-	c.releaseBuffer()
 	return
 }
 
 func (c *tcpConn) SendMsgWithTimeout(message ...[]byte) (err error) {
-	connBuffer := c.getBuffer()
-	tempBuffer := bytes.Get()
+	buf := buffers.Get()
 	for _, m := range message {
-		tempBuffer.B, err = c.server.pkt.Packet(m)
+		data, err := c.server.pkt.Packet(m)
 		if err != nil {
 			break
 		}
-		if _, err = connBuffer.Write(tempBuffer.B); err != nil {
-			break
-		}
-		tempBuffer.Reset()
+		buf.Write(data)
 	}
+	m := bytes.Copy(buf.Bytes())
+	buffers.Put(buf)
 	if err == nil {
 		if err = c.setWriteDeadline(c.server.config.WriteTimeout); err != nil {
-			goto end
+			return
 		}
-		_, err = c.conn.Write(connBuffer.B)
+		_, err = c.conn.Write(m)
 	}
-end:
-	bytes.Put(tempBuffer)
-	c.releaseBuffer()
 	return
 }
 
@@ -119,8 +96,6 @@ func (c *tcpConn) Close() error {
 	if atomic.CompareAndSwapInt32(&c.closeTag, open, closed) == false {
 		return nil
 	}
-	// 归还缓存
-	bytes.Put(c.writeBuffer)
 	// 关闭连接
 	return c.conn.Close()
 }

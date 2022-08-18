@@ -2,6 +2,7 @@ package tcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -13,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pyihe/go-pkg/bytes"
+	"github.com/pyihe/go-pkg/buffers"
 	"github.com/pyihe/go-pkg/errors"
 	"github.com/pyihe/go-pkg/maps"
 	"github.com/pyihe/go-pkg/packets"
@@ -40,7 +41,7 @@ type Handler interface {
 
 type message struct {
 	conn *tcpConn
-	data *bytes.ByteBuffer
+	data *bytes.Buffer
 }
 
 type tcpServer struct {
@@ -194,7 +195,7 @@ func (s *tcpServer) getMessage() *message {
 	data := s.msgPool.Get()
 	if data == nil {
 		return &message{
-			data: bytes.Get(),
+			data: buffers.Get(),
 		}
 	}
 	return data.(*message)
@@ -203,7 +204,7 @@ func (s *tcpServer) getMessage() *message {
 func (s *tcpServer) putMessage(m *message) {
 	if m != nil {
 		m.data.Reset()
-		bytes.Put(m.data)
+		buffers.Put(m.data)
 		m.data = nil
 		m.conn = nil
 	}
