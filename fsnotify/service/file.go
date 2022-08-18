@@ -8,7 +8,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/pyihe/go-example/fsnotify/model"
-	"github.com/pyihe/go-example/fsnotify/pkg"
+	"github.com/pyihe/go-example/pkg"
 	"github.com/pyihe/plogs"
 )
 
