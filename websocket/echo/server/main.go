@@ -34,7 +34,7 @@ func main() {
 	defer s.Close()
 
 	interrupt := make(chan os.Signal)
-	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGSTOP, syscall.SIGINT)
+	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	<-interrupt
 }
 

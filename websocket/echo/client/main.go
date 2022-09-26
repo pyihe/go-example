@@ -17,7 +17,7 @@ var conns = maps.NewMap()
 func main() {
 	var closeChan = make(chan *client, 10) // 传递被服务器关闭的连接
 	var interrupt = make(chan os.Signal)   // 接收中断信号
-	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGSTOP, syscall.SIGINT)
+	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	// 开启连接
 	for i := 0; i < 100; i++ {
 		c := dial("ws://127.0.0.1:8888")

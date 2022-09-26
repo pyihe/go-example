@@ -17,7 +17,7 @@ func main() {
 		Addr: ":8080",
 	}
 	server := http_api.NewHTTPServer(config)
-	defer server.Stop()
+	defer server.Close()
 
 	// service
 	fService := service.NewFileService("./files")

@@ -36,7 +36,7 @@ func main() {
 		RoutePrefix: "/api",
 	}
 	httpServer := http_api.NewHTTPServer(httpConfig)
-	defer httpServer.Stop()
+	defer httpServer.Close()
 
 	// 初始化service
 	userService := service.NewUserService()
