@@ -3,10 +3,11 @@ package route
 import (
 	"net/http"
 
+	"pkg"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pyihe/go-example/gin-swagger/model/form"
 	"github.com/pyihe/go-example/gin-swagger/service"
-	"github.com/pyihe/go-example/pkg"
 	"github.com/pyihe/go-pkg/https/http_api"
 )
 

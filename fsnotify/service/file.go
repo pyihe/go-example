@@ -6,9 +6,10 @@ import (
 	"path"
 	"sync"
 
+	"pkg"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/pyihe/go-example/fsnotify/model"
-	"github.com/pyihe/go-example/pkg"
 	"github.com/pyihe/plogs"
 )
 
