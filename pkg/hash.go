@@ -3,8 +3,7 @@ package pkg
 import (
 	"crypto/md5"
 	"encoding/hex"
-
-	"github.com/pyihe/go-pkg/strings"
+	"strings"
 )
 
 // MD5 获取文件的md5, 转换为大写

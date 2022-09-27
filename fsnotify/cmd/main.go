@@ -1,9 +1,10 @@
 package main
 
 import (
+	"pkg"
+
 	"github.com/pyihe/go-example/fsnotify/route"
 	"github.com/pyihe/go-example/fsnotify/service"
-	"github.com/pyihe/go-example/pkg"
 	"github.com/pyihe/go-pkg/https/http_api"
 	"github.com/pyihe/go-pkg/tools"
 )

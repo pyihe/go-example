@@ -1,10 +1,11 @@
 package main
 
 import (
+	"pkg"
+
 	_ "github.com/pyihe/go-example/gin-swagger/docs"
 	"github.com/pyihe/go-example/gin-swagger/route"
 	"github.com/pyihe/go-example/gin-swagger/service"
-	"github.com/pyihe/go-example/pkg"
 	"github.com/pyihe/go-pkg/https/http_api"
 	"github.com/pyihe/go-pkg/tools"
 )

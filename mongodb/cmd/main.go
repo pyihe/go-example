@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 
+	"pkg"
+
 	"github.com/pyihe/go-example/mongodb/service"
 	"github.com/pyihe/go-example/mongodb/service/repository/mongo"
-	"github.com/pyihe/go-example/pkg"
 	"github.com/pyihe/go-pkg/tools"
 	"github.com/pyihe/plogs"
 	mgo "go.mongodb.org/mongo-driver/mongo"
