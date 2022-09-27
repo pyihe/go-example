@@ -20,6 +20,10 @@ func New(config clientv3.Config) *Client {
 	}
 }
 
+func (c *Client) Close() error {
+	return c.etcdClient.Close()
+}
+
 func (c *Client) Register(k, v string) error {
 	var kv = clientv3.NewKV(c.etcdClient)
 	var lease = clientv3.NewLease(c.etcdClient)
