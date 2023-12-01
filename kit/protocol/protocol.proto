@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "github.com/pyihe/go-example/kit/pb;pb";
+
+service Echo {
+    rpc Visit(VisitRequest) returns (VisitResponse){}
+}
+
+message HelloRequest {
+    string name = 1;
+}
+
+message HelloResponse {
+    string echo = 1;
+}
+
+message VisitRequest {
+    string place = 1;
+}
+
+message VisitResponse {
+    string echo = 1;
+}

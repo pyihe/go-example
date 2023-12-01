@@ -31,7 +31,8 @@ func main() {
 	defer logger.Close()
 
 	httpConfig := http_api.Config{
-		SwaggerURL:  "http://localhost:8080/swagger/doc.json",
+		SwaggerURL: "http://localhost:8080/swagger/doc.json",
+		//SwaggerURL:  "http://localhost:8080/swagger/index.html",
 		Name:        "gin-swagger",
 		Addr:        ":8080",
 		RoutePrefix: "/api",
