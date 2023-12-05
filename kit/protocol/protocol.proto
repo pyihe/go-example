@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package pb;
 
-option go_package = "github.com/pyihe/go-example/kit/pb;pb";
+option go_package = "../protocol";
 
 service Echo {
     rpc Visit(VisitRequest) returns (VisitResponse){}
