@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "/proto";
+
+service SimpleService {
+    rpc Simple (SimpleRequest) returns(SimpleResponse){}
+}
+
+message SimpleRequest {
+    string Body = 1;
+}
+
+message SimpleResponse {
+    string Body = 1;
+}

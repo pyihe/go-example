@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "/proto";
+
+package proto;
+
+service StaticService {
+    rpc Stream (stream StaticRequest) returns (stream StaticResponse){}
+}
+
+message StaticRequest {
+    string Body = 1;
+}
+
+message StaticResponse {
+    string Body = 1;
+}
