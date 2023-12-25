@@ -8,6 +8,7 @@ import (
 
 type Client struct {
 	etcdClient *clientv3.Client
+	watcher    clientv3.Watcher
 }
 
 func New(config clientv3.Config) *Client {
@@ -15,13 +16,19 @@ func New(config clientv3.Config) *Client {
 	if err != nil {
 		panic(err)
 	}
+
 	return &Client{
 		etcdClient: c,
+		watcher:    clientv3.NewWatcher(c),
 	}
 }
 
 func (c *Client) Close() error {
-	return c.etcdClient.Close()
+	err := c.etcdClient.Close()
+	if err != nil {
+		return err
+	}
+	return c.watcher.Close()
 }
 
 func (c *Client) Register(k, v string) error {
@@ -54,10 +61,7 @@ func (c *Client) Register(k, v string) error {
 
 func (c *Client) Watch(key string, handler func(event *clientv3.Event), opts ...clientv3.OpOption) {
 	go func() {
-		var watcher = clientv3.NewWatcher(c.etcdClient)
-		defer watcher.Close()
-
-		var watchChan = watcher.Watch(context.Background(), key, opts...)
+		var watchChan = c.watcher.Watch(context.Background(), key, opts...)
 		for data := range watchChan {
 			if data.Canceled {
 				break
